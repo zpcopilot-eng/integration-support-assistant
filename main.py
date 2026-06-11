@@ -1,10 +1,13 @@
 import os
 from datetime import datetime
 
+import httpx
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain_core.tools import tool
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
 from greennode_agentbase import (
     GreenNodeAgentBaseApp,
@@ -200,6 +203,51 @@ def handler(payload: dict, context: RequestContext) -> dict:
 def health_check() -> PingStatus:
     """Custom health check for GET /health endpoint."""
     return PingStatus.HEALTHY
+
+
+# --- Telegram Webhook ---
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+
+
+async def telegram_webhook(request: Request) -> Response:
+    """Receive Telegram updates, run them through the agent, and reply via the Bot API."""
+    if not TELEGRAM_BOT_TOKEN:
+        return JSONResponse({"ok": False, "error": "TELEGRAM_BOT_TOKEN not configured"}, status_code=500)
+
+    if TELEGRAM_WEBHOOK_SECRET:
+        secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if secret != TELEGRAM_WEBHOOK_SECRET:
+            return JSONResponse({"ok": False, "error": "invalid secret token"}, status_code=401)
+
+    update = await request.json()
+    message = update.get("message") or update.get("edited_message")
+    if not message or "text" not in message:
+        return JSONResponse({"ok": True})
+
+    chat_id = message["chat"]["id"]
+    text = message["text"]
+
+    config = {
+        "configurable": {
+            "thread_id": str(chat_id),
+            "actor_id": str(chat_id),
+        }
+    }
+    result = agent.invoke({"messages": [{"role": "user", "content": text}]}, config=config)
+    reply_text = result["messages"][-1].content
+
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{TELEGRAM_API_URL}/sendMessage",
+            json={"chat_id": chat_id, "text": reply_text},
+        )
+
+    return JSONResponse({"ok": True})
+
+
+app.add_route("/telegram-webhook", telegram_webhook, methods=["POST"])
 
 
 if __name__ == "__main__":
