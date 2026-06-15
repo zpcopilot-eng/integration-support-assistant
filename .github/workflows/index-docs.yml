@@ -1,0 +1,30 @@
+name: Re-index docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "scripts/index_docs.py"
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Re-index docs into memory
+        env:
+          MEMORY_ID: ${{ secrets.MEMORY_ID }}
+          DOCS_MEMORY_STRATEGY_ID: ${{ secrets.DOCS_MEMORY_STRATEGY_ID }}
+          GREENNODE_CLIENT_ID: ${{ secrets.GREENNODE_CLIENT_ID }}
+          GREENNODE_CLIENT_SECRET: ${{ secrets.GREENNODE_CLIENT_SECRET }}
+          GREENNODE_AGENT_IDENTITY: ${{ secrets.GREENNODE_AGENT_IDENTITY }}
+        run: python3 scripts/index_docs.py

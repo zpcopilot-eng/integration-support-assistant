@@ -2,6 +2,7 @@ import html
 import os
 import re
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
@@ -157,7 +158,10 @@ SYSTEM_PROMPT = (
     "- Chi dung markdown don gian: **chu dam** cho tu khoa quan trong, `code` cho ten "
     "field/endpoint/ma loi, va danh sach gach dau dong '- '. Khong dung heading (#), "
     "khong dung bang markdown, khong dung code block ba dau backtick.\n"
-    "- Trich nguon ngan gon ngay sau thong tin lien quan, dang '(Nguon: ten-file.md)', "
+    "- Moi ket qua tra ve tu search_docs bat dau bang mot dong dang '[Nguon: duong-dan]'. "
+    "Khi trich dan, COPY NGUYEN VAN duong-dan do (bao gom ca phan #anchor neu co), khong "
+    "tu sua, dich, viet tat, hay bia ra duong dan khac.\n"
+    "- Trich nguon ngan gon ngay sau thong tin lien quan, dang '(Nguon: duong-dan-da-copy)', "
     "khong lap lai danh sach nguon o cuoi cau tra loi."
 )
 
@@ -167,6 +171,25 @@ agent = create_agent(
     system_prompt=SYSTEM_PROMPT,
     checkpointer=checkpointer,
 )
+
+
+# --- Citation Validation ---
+# Build the set of real docs/ paths once so source citations can be checked
+# against it after the LLM responds (catches hallucinated/mangled paths).
+ROOT = Path(__file__).resolve().parent
+DOC_PATHS = {str(p.relative_to(ROOT)) for p in (ROOT / "docs").rglob("*.md")}
+
+CITATION_RE = re.compile(r"\s*\(Ngu[oồ]n:\s*([^)]+)\)")
+
+
+def validate_citations(text: str) -> str:
+    """Strip source citations that don't point at a real file under docs/."""
+
+    def replace(match: re.Match) -> str:
+        file_part = match.group(1).split("#", 1)[0].strip()
+        return match.group(0) if file_part in DOC_PATHS else ""
+
+    return CITATION_RE.sub(replace, text)
 
 
 @app.entrypoint
@@ -203,7 +226,7 @@ def handler(payload: dict, context: RequestContext) -> dict:
     ai_message = result["messages"][-1]
     return {
         "status": "success",
-        "response": ai_message.content,
+        "response": validate_citations(ai_message.content),
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -266,7 +289,7 @@ async def telegram_webhook(request: Request) -> Response:
         }
     }
     result = agent.invoke({"messages": [{"role": "user", "content": text}]}, config=config)
-    reply_text = result["messages"][-1].content
+    reply_text = validate_citations(result["messages"][-1].content)
     if len(reply_text) > TELEGRAM_MAX_MESSAGE_LENGTH:
         reply_text = reply_text[: TELEGRAM_MAX_MESSAGE_LENGTH - 1] + "…"
     html_text = markdown_to_telegram_html(reply_text)
