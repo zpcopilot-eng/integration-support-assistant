@@ -1,4 +1,6 @@
+import html
 import os
+import re
 from datetime import datetime
 
 import httpx
@@ -146,10 +148,17 @@ SYSTEM_PROMPT = (
     "Ban la Integration Support Assistant cua Zalopay. Tra loi cau hoi ve tich hop "
     "he thong (API, auth, webhook, ma loi, cau hinh moi truong) bang tieng Viet, "
     "giu nguyen thuat ngu ky thuat tieng Anh. Luon dung tool 'search_docs' de tim "
-    "thong tin trong tai lieu truoc khi tra loi, va trich dan nguon (ten file/muc "
-    "trong docs/). Neu khong tim thay thong tin lien quan, tra loi ro: "
-    "'Toi khong tim thay thong tin nay trong tai lieu hien co.' Khong suy doan "
-    "hoac bia thong tin ve API, endpoint, hay cau hinh."
+    "thong tin trong tai lieu truoc khi tra loi. Neu khong tim thay thong tin lien quan, "
+    "tra loi ro: 'Toi khong tim thay thong tin nay trong tai lieu hien co.' Khong suy doan "
+    "hoac bia thong tin ve API, endpoint, hay cau hinh.\n\n"
+    "Quy tac tra loi:\n"
+    "- Tra loi suc tich, di thang vao trong tam, khong lap lai y, khong dien giai dai dong.\n"
+    "- Chi neu cac buoc/chi tiet cu the khi nguoi dung can de thuc hien.\n"
+    "- Chi dung markdown don gian: **chu dam** cho tu khoa quan trong, `code` cho ten "
+    "field/endpoint/ma loi, va danh sach gach dau dong '- '. Khong dung heading (#), "
+    "khong dung bang markdown, khong dung code block ba dau backtick.\n"
+    "- Trich nguon ngan gon ngay sau thong tin lien quan, dang '(Nguon: ten-file.md)', "
+    "khong lap lai danh sach nguon o cuoi cau tra loi."
 )
 
 agent = create_agent(
@@ -209,6 +218,27 @@ def health_check() -> PingStatus:
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
+
+def markdown_to_telegram_html(text: str) -> str:
+    """Convert the limited markdown subset used by SYSTEM_PROMPT to Telegram HTML.
+
+    Supports: **bold**, `code`, and '- '/'* ' bullet lists (converted to '• ').
+    Escapes HTML special characters first so raw text can't break parse_mode=HTML.
+    """
+    escaped = html.escape(text, quote=False)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
+    escaped = re.sub(r"`(.+?)`", r"<code>\1</code>", escaped)
+
+    lines = []
+    for line in escaped.split("\n"):
+        stripped = line.lstrip()
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            indent = line[: len(line) - len(stripped)]
+            line = f"{indent}• {stripped[2:]}"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 async def telegram_webhook(request: Request) -> Response:
@@ -237,12 +267,20 @@ async def telegram_webhook(request: Request) -> Response:
     }
     result = agent.invoke({"messages": [{"role": "user", "content": text}]}, config=config)
     reply_text = result["messages"][-1].content
+    if len(reply_text) > TELEGRAM_MAX_MESSAGE_LENGTH:
+        reply_text = reply_text[: TELEGRAM_MAX_MESSAGE_LENGTH - 1] + "…"
+    html_text = markdown_to_telegram_html(reply_text)
 
     async with httpx.AsyncClient() as client:
-        await client.post(
+        resp = await client.post(
             f"{TELEGRAM_API_URL}/sendMessage",
-            json={"chat_id": chat_id, "text": reply_text},
+            json={"chat_id": chat_id, "text": html_text, "parse_mode": "HTML"},
         )
+        if resp.status_code != 200:
+            await client.post(
+                f"{TELEGRAM_API_URL}/sendMessage",
+                json={"chat_id": chat_id, "text": reply_text},
+            )
 
     return JSONResponse({"ok": True})
 
