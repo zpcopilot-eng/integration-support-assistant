@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/**"
+      - "zalopay-integration-docs/**"
       - "scripts/index_docs.py"
 
 jobs:

@@ -5,7 +5,7 @@ Thư mục này chứa tài liệu kỹ thuật mà **Integration Support Assist
 ## Cấu trúc đề xuất
 
 ```
-docs/
+zalopay-integration-docs/
   apis/                  # Tài liệu API (REST/gRPC): endpoint, request/response, mã lỗi
   integration-guides/    # Hướng dẫn tích hợp theo từng hệ thống/đối tác
   faq/                   # Câu hỏi thường gặp khi tích hợp

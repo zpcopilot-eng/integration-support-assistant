@@ -1,9 +1,9 @@
-"""Index docs/ markdown files into AgentBase Memory for the search_docs tool.
+"""Index zalopay-integration-docs/ markdown files into AgentBase Memory for the search_docs tool.
 
 Each file is split into chunks by heading (## or ###) so retrieval and
-citations can point at a specific section, e.g. [Nguồn: faq/faq.md#cau-hoi-1].
-Content before the first heading is indexed as its own chunk citing just the
-file path (no anchor).
+citations can point at a specific section, e.g.
+[Nguồn: zalopay-integration-docs/faq/faq.md#cau-hoi-1]. Content before the
+first heading is indexed as its own chunk citing just the file path (no anchor).
 
 Usage:
     python3 scripts/index_docs.py
@@ -20,7 +20,7 @@ from greennode_agentbase.memory.models import MemoryRecordInsertDirectlyRequest
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS_DIR = ROOT / "docs"
+DOCS_DIR = ROOT / "zalopay-integration-docs"
 
 MEMORY_ID = os.environ["MEMORY_ID"]
 DOCS_MEMORY_STRATEGY_ID = os.environ["DOCS_MEMORY_STRATEGY_ID"]
@@ -76,6 +76,28 @@ def chunk_file(content: str, rel_path: Path) -> list[str]:
     return chunks
 
 
+# Number of records sent per insert call. The memory API embeds each record
+# synchronously, so a single request with all ~200 chunks exceeds the
+# client's default 30s HTTP timeout. Smaller batches keep each call fast.
+BATCH_SIZE = 20
+
+
+# Upper bound for listing existing records to purge. The memory API has no
+# bulk-delete or upsert-by-key, so a full resync deletes everything in the
+# namespace first to avoid unbounded duplicate growth across repeated runs.
+LIST_LIMIT = 2000
+
+
+def purge_namespace(client: MemoryClient) -> None:
+    """Delete all existing records in DOCS_NAMESPACE before re-indexing."""
+    existing = client.list_memory_records(id=MEMORY_ID, namespace=DOCS_NAMESPACE, limit=LIST_LIMIT)
+    if not existing:
+        return
+    print(f"Deleting {len(existing)} existing records from {DOCS_NAMESPACE}")
+    for record in existing:
+        client.delete_memory_record(id=MEMORY_ID, memoryRecordId=record["id"])
+
+
 def main() -> None:
     client = MemoryClient()
 
@@ -87,12 +109,17 @@ def main() -> None:
             continue
         records.extend(chunk_file(content, rel_path))
 
+    purge_namespace(client)
+
     print(f"Indexing {len(records)} chunks into memory {MEMORY_ID} (namespace {DOCS_NAMESPACE})")
-    client.insert_memory_records_directly(
-        id=MEMORY_ID,
-        namespace=DOCS_NAMESPACE,
-        request=MemoryRecordInsertDirectlyRequest(memoryRecords=records),
-    )
+    for i in range(0, len(records), BATCH_SIZE):
+        batch = records[i : i + BATCH_SIZE]
+        print(f"  batch {i // BATCH_SIZE + 1}: records {i + 1}-{i + len(batch)}")
+        client.insert_memory_records_directly(
+            id=MEMORY_ID,
+            namespace=DOCS_NAMESPACE,
+            request=MemoryRecordInsertDirectlyRequest(memoryRecords=batch),
+        )
     print("Done.")
 
 

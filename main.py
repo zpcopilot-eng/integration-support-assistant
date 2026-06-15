@@ -1,6 +1,7 @@
 import html
 import os
 import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -18,7 +19,10 @@ from greennode_agentbase import (
     PingStatus,
 )
 from greennode_agentbase.memory import MemoryClient
-from greennode_agentbase.memory.models import MemoryRecordSearchRequest
+from greennode_agentbase.memory.models import (
+    MemoryRecordInsertDirectlyRequest,
+    MemoryRecordSearchRequest,
+)
 from greennode_agent_bridge import AgentBaseMemoryEvents
 from langgraph.config import get_config
 
@@ -117,8 +121,8 @@ def recall(query: str) -> str:
     return "\n".join(f"- {r['memory']} (score: {r['score']:.2f})" for r in results)
 
 
-# --- Documentation Search Tool (docs/ indexed into long-term memory) ---
-# Index docs/ content into the docs namespace ahead of time (see scripts/index_docs.py),
+# --- Documentation Search Tool (zalopay-integration-docs/ indexed into long-term memory) ---
+# Index zalopay-integration-docs/ content into the docs namespace ahead of time (see scripts/index_docs.py),
 # then this tool searches that namespace for integration support answers.
 DOCS_MEMORY_STRATEGY_ID = os.environ.get("DOCS_MEMORY_STRATEGY_ID", "")
 DOCS_NAMESPACE = f"/strategies/{DOCS_MEMORY_STRATEGY_ID}/actors/shared"
@@ -126,7 +130,7 @@ DOCS_NAMESPACE = f"/strategies/{DOCS_MEMORY_STRATEGY_ID}/actors/shared"
 
 @tool
 def search_docs(query: str) -> str:
-    """Search Zalopay integration documentation (docs/) for relevant information.
+    """Search Zalopay integration documentation (zalopay-integration-docs/) for relevant information.
 
     Args:
         query: Natural language search query about APIs, auth, webhooks, error codes, etc.
@@ -162,7 +166,9 @@ SYSTEM_PROMPT = (
     "Khi trich dan, COPY NGUYEN VAN duong-dan do (bao gom ca phan #anchor neu co), khong "
     "tu sua, dich, viet tat, hay bia ra duong dan khac.\n"
     "- Trich nguon ngan gon ngay sau thong tin lien quan, dang '(Nguon: duong-dan-da-copy)', "
-    "khong lap lai danh sach nguon o cuoi cau tra loi."
+    "khong lap lai danh sach nguon o cuoi cau tra loi.\n"
+    "- Ten cong ty luon viet la 'Zalopay' (chu 'p' thuong), du tai lieu nguon viet "
+    "khac di (vi du 'ZaloPay', 'Zalo Pay')."
 )
 
 agent = create_agent(
@@ -174,22 +180,57 @@ agent = create_agent(
 
 
 # --- Citation Validation ---
-# Build the set of real docs/ paths once so source citations can be checked
-# against it after the LLM responds (catches hallucinated/mangled paths).
+# Build the set of real zalopay-integration-docs/ paths once so source citations
+# can be checked against it after the LLM responds (catches hallucinated/mangled paths).
 ROOT = Path(__file__).resolve().parent
-DOC_PATHS = {str(p.relative_to(ROOT)) for p in (ROOT / "docs").rglob("*.md")}
+DOC_PATHS = {str(p.relative_to(ROOT)) for p in (ROOT / "zalopay-integration-docs").rglob("*.md")}
 
 CITATION_RE = re.compile(r"\s*\(Ngu[oồ]n:\s*([^)]+)\)")
 
 
 def validate_citations(text: str) -> str:
-    """Strip source citations that don't point at a real file under docs/."""
+    """Strip source citations that don't point at a real file under zalopay-integration-docs/."""
 
     def replace(match: re.Match) -> str:
         file_part = match.group(1).split("#", 1)[0].strip()
         return match.group(0) if file_part in DOC_PATHS else ""
 
     return CITATION_RE.sub(replace, text)
+
+
+# --- Doc Gap Logging ---
+# When the agent can't find an answer in zalopay-integration-docs/, log the
+# question to a shared namespace so the docs team can review unanswered
+# questions and fill gaps.
+DOC_GAPS_NAMESPACE = f"/strategies/{DOCS_MEMORY_STRATEGY_ID}/actors/doc-gaps"
+# Kept short and matched loosely: the model doesn't always reproduce the exact
+# phrasing from SYSTEM_PROMPT, and sometimes drops Vietnamese diacritics
+# entirely, so comparison is done on accent-stripped text.
+NOT_FOUND_MARKER = "toi khong tim thay thong tin"
+
+
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+
+
+def is_doc_gap(response_text: str) -> bool:
+    """Check whether the response is the agent's "not found in docs" reply."""
+    return NOT_FOUND_MARKER in _strip_accents(response_text).lower()
+
+
+def log_doc_gap(question: str) -> None:
+    """Record a question the agent couldn't answer from docs/, for later review."""
+    try:
+        memory_client.insert_memory_records_directly(
+            id=MEMORY_ID,
+            namespace=DOC_GAPS_NAMESPACE,
+            request=MemoryRecordInsertDirectlyRequest(
+                memoryRecords=[f"[{datetime.now().isoformat()}] {question}"]
+            ),
+        )
+    except Exception:
+        pass
 
 
 @app.entrypoint
@@ -224,9 +265,12 @@ def handler(payload: dict, context: RequestContext) -> dict:
         config=config,
     )
     ai_message = result["messages"][-1]
+    response_text = validate_citations(ai_message.content)
+    if is_doc_gap(response_text):
+        log_doc_gap(message)
     return {
         "status": "success",
-        "response": validate_citations(ai_message.content),
+        "response": response_text,
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -290,6 +334,8 @@ async def telegram_webhook(request: Request) -> Response:
     }
     result = agent.invoke({"messages": [{"role": "user", "content": text}]}, config=config)
     reply_text = validate_citations(result["messages"][-1].content)
+    if is_doc_gap(reply_text):
+        log_doc_gap(text)
     if len(reply_text) > TELEGRAM_MAX_MESSAGE_LENGTH:
         reply_text = reply_text[: TELEGRAM_MAX_MESSAGE_LENGTH - 1] + "…"
     html_text = markdown_to_telegram_html(reply_text)

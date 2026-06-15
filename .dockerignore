@@ -11,4 +11,4 @@ __pycache__/
 .git/
 .gitignore
 *.md
-!docs/**/*.md
+!zalopay-integration-docs/**/*.md

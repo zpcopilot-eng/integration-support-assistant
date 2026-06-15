@@ -92,9 +92,9 @@ curl http://127.0.0.1:8080/health
 
 See the [AgentBase Console](https://aiplatform.console.vngcloud.vn) to manage runtimes, identities, and memory.
 
-## Documentation Search (docs/)
+## Documentation Search (zalopay-integration-docs/)
 
-This agent answers integration support questions based on documents in `docs/`. The content of `docs/` must be indexed into the agent's memory (namespace `/strategies/docs/actors/shared`) so the `search_docs` tool can retrieve it. Use `/agentbase-memory` to set up the memory store and ingest documents.
+This agent answers integration support questions based on documents in `zalopay-integration-docs/`. The content of `zalopay-integration-docs/` must be indexed into the agent's memory (namespace `/strategies/docs/actors/shared`) so the `search_docs` tool can retrieve it. Use `/agentbase-memory` to set up the memory store and ingest documents.
 
 ## Add Conversation Memory (Optional)
 
@@ -107,4 +107,4 @@ When you need conversation history or long-term memory, use `/agentbase-memory` 
 - `requirements.txt` - Python dependencies
 - `.greennode.json` - AgentBase configuration
 - `.env.example` - Environment variable template
-- `docs/` - Integration support documentation (source for `search_docs`)
+- `zalopay-integration-docs/` - Integration support documentation (source for `search_docs`)
