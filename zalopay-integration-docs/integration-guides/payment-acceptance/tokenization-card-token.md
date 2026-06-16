@@ -15,7 +15,7 @@ Card tokenization enables merchants to store customer payment card information w
 
 Before integration, ensure:
 
-- Active merchant account with `app_id` and `mac_key` credentials from Merchant Portal
+- Active merchant account with `app_id`, `key1`, and `key2` credentials from Merchant Portal
 - Familiarity with required APIs: CreateOrder, QueryOrder, CreateBinding, Unbind, PayByToken, and QueryPaymentToken
 - Understanding of callback mechanisms and secure data transmission protocols
 

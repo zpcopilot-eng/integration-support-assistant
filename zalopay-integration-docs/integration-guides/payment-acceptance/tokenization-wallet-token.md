@@ -10,7 +10,7 @@ Wallet Token enables merchants to implement auto-debit functionality, allowing a
 
 Before integration, merchants must:
 
-- Register and obtain `app_id` and `mac_key` credentials
+- Register and obtain `app_id`, `key1`, and `key2` credentials
 - Understand multiple tokenization APIs including binding, querying, and payment APIs
 - Comprehend callback mechanisms and secure data transmission protocols
 
@@ -47,7 +47,7 @@ The QueryUser API provides basic user details, currently limited to masked phone
 
 ## Security Requirements
 
-"It's **important** to verify that the request actually came from Zalopay by using the callback key to validate the callback's data."
+"It's **important** to verify that the request actually came from Zalopay by using `key2` to validate the callback's data" (see [Secure Data Transmission](../developer-tools/security-secure-data-transmission.md#hmac)).
 
 Callback URLs must be publicly accessible with matching server domains.
 

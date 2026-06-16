@@ -20,9 +20,9 @@ The platform offers several core advantages:
 
 Before implementation, merchants must:
 
-1. Register and obtain credentials (`app_id`, `mac_key`, `private_key`) from Merchant Portal
+1. Register and obtain credentials (`app_id`, `key1`, `key2`) from Merchant Portal
 2. Understand relevant APIs: Verify Account, Transfer Fund, Query Transaction, Balance, and Bank Code List
-3. Familiarize themselves with secure data transmission protocols
+3. Familiarize themselves with secure data transmission protocols (see [Secure Data Transmission](../developer-tools/security-secure-data-transmission.md#hmac))
 
 ## Four-Step Integration Workflow
 

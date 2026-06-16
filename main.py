@@ -162,11 +162,25 @@ SYSTEM_PROMPT = (
     "- Chi dung markdown don gian: **chu dam** cho tu khoa quan trong, `code` cho ten "
     "field/endpoint/ma loi, va danh sach gach dau dong '- '. Khong dung heading (#), "
     "khong dung bang markdown, khong dung code block ba dau backtick.\n"
+    "- Noi dung tai lieu co the chua duong dan dang markdown link '[ten](duong-dan)'. "
+    "KHONG bao gio copy nguyen cu phap '[ten](duong-dan)' vao cau tra loi. Thay vao do:\n"
+    "  + Neu duong dan la URL web (bat dau bang http/https), viet lai thanh URL day du "
+    "dang van ban thuong (vi du: https://mc.zalopay.vn), khong dat trong dau [].\n"
+    "  + Neu duong dan tro toi file .md khac (vi du './order-query.md' hoac "
+    "'../integration-guides/...'), chi neu ten tai lieu/API bang van ban thuong (bo dau "
+    "[] va duong dan file), va dung dinh dang '(Nguon: ...)' o duoi neu can trich dan "
+    "theo quy tac ben duoi.\n"
     "- Moi ket qua tra ve tu search_docs bat dau bang mot dong dang '[Nguon: duong-dan]'. "
     "Khi trich dan, COPY NGUYEN VAN duong-dan do (bao gom ca phan #anchor neu co), khong "
     "tu sua, dich, viet tat, hay bia ra duong dan khac.\n"
     "- Trich nguon ngan gon ngay sau thong tin lien quan, dang '(Nguon: duong-dan-da-copy)', "
     "khong lap lai danh sach nguon o cuoi cau tra loi.\n"
+    "- Mot so ket qua tra ve tu search_docs co them dong '[Trang tai lieu goc: "
+    "https://docs.zalopay.vn/...]' ngay sau dong '[Nguon: ...]'. Day la link toi trang "
+    "tai lieu chinh thuc tren docs.zalopay.vn ma merchant co the mo truc tiep. Khi cau "
+    "tra loi de cap toi mot huong dan/tai lieu cu the, hay kem theo link nay (COPY NGUYEN "
+    "VAN URL) duoi dang van ban thuong, vi du '(Xem chi tiet: https://docs.zalopay.vn/...)'. "
+    "KHONG dat URL nay trong cu phap '(Nguon: ...)'.\n"
     "- Ten cong ty luon viet la 'Zalopay' (chu 'p' thuong), du tai lieu nguon viet "
     "khac di (vi du 'ZaloPay', 'Zalo Pay')."
 )
@@ -193,6 +207,10 @@ def validate_citations(text: str) -> str:
 
     def replace(match: re.Match) -> str:
         file_part = match.group(1).split("#", 1)[0].strip()
+        # Leave URL-style references (e.g. a misplaced docs.zalopay.vn link) alone —
+        # only strip citations that look like hallucinated/mangled local file paths.
+        if file_part.startswith("http://") or file_part.startswith("https://"):
+            return match.group(0)
         return match.group(0) if file_part in DOC_PATHS else ""
 
     return CITATION_RE.sub(replace, text)
@@ -295,6 +313,11 @@ def markdown_to_telegram_html(text: str) -> str:
     Escapes HTML special characters first so raw text can't break parse_mode=HTML.
     """
     escaped = html.escape(text, quote=False)
+    # Defensive fallback: SYSTEM_PROMPT tells the model not to emit markdown
+    # links, but if one slips through, turn web URLs into real Telegram links
+    # and strip the markdown syntax for relative file links (keep the label).
+    escaped = re.sub(r"\[([^\[\]]+)\]\((https?://[^\s)]+)\)", r'<a href="\2">\1</a>', escaped)
+    escaped = re.sub(r"\[([^\[\]]+)\]\([^\s)]+\)", r"\1", escaped)
     escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
     escaped = re.sub(r"`(.+?)`", r"<code>\1</code>", escaped)
 

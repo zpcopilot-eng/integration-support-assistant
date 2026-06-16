@@ -20,7 +20,7 @@ The platform provides:
 
 The implementation follows four sequential steps:
 
-- **Store Configuration** - Establish storefront and configure credentials (app_id, store_id, mac_key)
+- **Store Configuration** - Establish storefront and configure credentials (app_id, store_id, key1, key2)
 - **Menu Synchronization** - Align menus and product folders
 - **Order Activation** - Enable order syncing with partner systems
 - **Order Updates** - Implement real-time status tracking

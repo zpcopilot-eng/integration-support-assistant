@@ -28,6 +28,18 @@ DOCS_NAMESPACE = f"/strategies/{DOCS_MEMORY_STRATEGY_ID}/actors/shared"
 
 HEADING_RE = re.compile(r"^(#{2,3})\s+(.+?)\s*$")
 
+# Most files start with a "Nguồn: https://docs.zalopay.vn/..." line pointing at the
+# original docs.zalopay.vn page. That line lives in the pre-heading chunk, so on its
+# own it's not retrievable alongside a specific section. Extract it once per file and
+# attach it to every chunk so search_docs results always carry the original web URL.
+SOURCE_URL_RE = re.compile(r"^Ngu[oồ]n:\s*(https://\S+)", re.MULTILINE)
+
+# Sections that only contain doc-site navigation/meta links (prev/next page,
+# "see also" links to other pages on docs.zalopay.vn) rather than integration
+# content. Indexing them adds low-value chunks that can crowd out useful
+# results in search_docs.
+SKIP_HEADINGS = {"navigation", "navigation structure", "key navigation", "related resources"}
+
 
 def slugify(heading: str) -> str:
     """Approximate GitHub-style heading anchors."""
@@ -39,6 +51,9 @@ def slugify(heading: str) -> str:
 
 def chunk_file(content: str, rel_path: Path) -> list[str]:
     """Split a markdown file into chunks, one per heading (## or ###)."""
+    source_url_match = SOURCE_URL_RE.search(content)
+    source_url = source_url_match.group(1) if source_url_match else None
+
     lines = content.splitlines()
 
     sections: list[tuple[str | None, list[str]]] = []
@@ -60,6 +75,8 @@ def chunk_file(content: str, rel_path: Path) -> list[str]:
         text = "\n".join(section_lines).strip()
         if not text:
             continue
+        if heading is not None and heading.lower() in SKIP_HEADINGS:
+            continue
 
         if heading is None:
             source = str(rel_path)
@@ -71,7 +88,10 @@ def chunk_file(content: str, rel_path: Path) -> list[str]:
                 slug = f"{slug}-{count}"
             source = f"{rel_path}#{slug}"
 
-        chunks.append(f"[Nguồn: {source}]\n\n{text}")
+        header = f"[Nguồn: {source}]"
+        if source_url:
+            header += f"\n[Trang tài liệu gốc: {source_url}]"
+        chunks.append(f"{header}\n\n{text}")
 
     return chunks
 

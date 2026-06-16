@@ -9,7 +9,7 @@ Zalopay's Dynamic QR Code is a payment integration designed for merchants with e
 ## Key Prerequisites
 
 Before integrating, merchants must:
-- Register and obtain `app_id` and `mac_key` credentials
+- Register and obtain `app_id`, `key1`, and `key2` credentials
 - Understand the CreateOrder and QueryOrder APIs
 - Comprehend callback mechanisms and secure data transmission protocols
 
@@ -36,7 +36,7 @@ Once Zalopay processes the order, merchants receive an `order_url` which must be
 
 ### Handling Callbacks
 
-When payment completes, Zalopay sends a POST callback. Critical security requirement: "verify that the request actually came from Zalopay by using the callback key to validate the callback's data."
+When payment completes, Zalopay sends a POST callback. Critical security requirement: "verify that the request actually came from Zalopay by using `key2` to validate the callback's data" (see [Secure Data Transmission](../developer-tools/security-secure-data-transmission.md#hmac)).
 
 ### Order Status Verification
 

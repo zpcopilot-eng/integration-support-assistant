@@ -34,7 +34,7 @@ Merchants must return:
 Return code 1 indicates success; 2 indicates failure.
 
 ## Security Validation
-Recipients must verify callbacks using HMAC-SHA256 (default) with a merchant-specific key. The validation ensures authenticity: "if (reqmac == callback_data.mac)" indicates a legitimate notification.
+Recipients must verify callbacks using HMAC-SHA256 (default) with `key2` (the callback/redirect key issued at registration — see [Secure Data Transmission](../developer-tools/security-secure-data-transmission.md#hmac)). The validation ensures authenticity: "if (reqmac == callback_data.mac)" indicates a legitimate notification.
 
 ## Best Practices
 - Implement HTTPS for encrypted communication

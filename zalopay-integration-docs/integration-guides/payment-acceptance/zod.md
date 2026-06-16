@@ -10,7 +10,7 @@ Zalopay On Delivery (ZOD) represents "a payment solution that enables users to p
 
 Before implementing ZOD, merchants must:
 
-- Register a merchant account and obtain `app_id` and `mac_key` credentials from the Merchant Portal
+- Register a merchant account and obtain `app_id`, `key1`, and `key2` credentials from the Merchant Portal
 - Understand three critical APIs: CreateZODInvoice, QueryZODInvoice, and QueryZODOrder
 - Comprehend callback mechanisms and secure data transmission protocols
 
@@ -22,12 +22,12 @@ The implementation consists of two primary steps:
 Merchants call the CreateZODInvoice API after customers select on-delivery payment. The response includes an `orderUrl` that merchants encode into a QR code for display. Notably, "This url is used to generate QR code will be displayed on shipper app and will be expired and mark as INVALID after 1 month since its creation."
 
 **Step 2: Process Payment Results**
-Upon payment completion, Zalopay sends callback notifications containing transaction details including appId, mcRefId, amount, zpTransId, and other payment metadata. Merchants must validate callbacks using callback keys for security purposes.
+Upon payment completion, Zalopay sends callback notifications containing transaction details including appId, mcRefId, amount, zpTransId, and other payment metadata. Merchants must validate callbacks using `key2` for security purposes (see [Secure Data Transmission](../developer-tools/security-secure-data-transmission.md#hmac)).
 
 ## Critical Security Requirements
 
 Documentation emphasizes merchants must:
-- Verify callbacks originated from Zalopay using callback key validation
+- Verify callbacks originated from Zalopay using `key2` (HMAC-SHA256) validation — see [Callback Documentation](../developer-tools/knowledge-base-callback.md#security-validation)
 - Ensure callback URLs use identical domains as their servers
 - Maintain publicly accessible callback endpoints
 
