@@ -305,6 +305,11 @@ TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
+# Maps chat_id → current session counter. Incrementing the counter changes
+# thread_id, which makes the LangGraph checkpointer treat it as a brand-new
+# conversation (no prior state). Resets to 0 on server restart.
+_chat_session_counter: dict[int, int] = {}
+
 
 def markdown_to_telegram_html(text: str) -> str:
     """Convert the limited markdown subset used by SYSTEM_PROMPT to Telegram HTML.
@@ -349,9 +354,21 @@ async def telegram_webhook(request: Request) -> Response:
     chat_id = message["chat"]["id"]
     text = message["text"]
 
+    if text.strip().lower() in ("/clear", "/new"):
+        _chat_session_counter[chat_id] = _chat_session_counter.get(chat_id, 0) + 1
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{TELEGRAM_API_URL}/sendMessage",
+                json={"chat_id": chat_id, "text": "🆕 Session mới đã được tạo. Lịch sử hội thoại trước đã bị xóa."},
+            )
+        return JSONResponse({"ok": True})
+
+    session_counter = _chat_session_counter.get(chat_id, 0)
+    thread_id = f"{chat_id}_{session_counter}" if session_counter else str(chat_id)
+
     config = {
         "configurable": {
-            "thread_id": str(chat_id),
+            "thread_id": thread_id,
             "actor_id": str(chat_id),
         }
     }
